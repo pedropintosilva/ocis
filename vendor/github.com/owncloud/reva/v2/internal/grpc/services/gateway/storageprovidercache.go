@@ -24,7 +24,6 @@ import (
 	rpc "github.com/cs3org/go-cs3apis/cs3/rpc/v1beta1"
 	registry "github.com/cs3org/go-cs3apis/cs3/storage/registry/v1beta1"
 	ctxpkg "github.com/owncloud/reva/v2/pkg/ctx"
-	sdk "github.com/owncloud/reva/v2/pkg/sdk/common"
 	"github.com/owncloud/reva/v2/pkg/storage/cache"
 	"github.com/owncloud/reva/v2/pkg/utils"
 	"github.com/pkg/errors"
@@ -41,8 +40,10 @@ type cachedRegistryClient struct {
 }
 
 func (c *cachedRegistryClient) ListStorageProviders(ctx context.Context, in *registry.ListStorageProvidersRequest, opts ...grpc.CallOption) (*registry.ListStorageProvidersResponse, error) {
-
-	spaceID := sdk.DecodeOpaqueMap(in.Opaque)["space_id"]
+	spaceID := utils.ReadPlainFromOpaque(in.GetOpaque(), "space_id")
+	if storageID := utils.ReadPlainFromOpaque(in.GetOpaque(), "storage_id"); storageID != "" {
+		spaceID = storageID + "$" + spaceID
+	}
 
 	u, ok := ctxpkg.ContextGetUser(ctx)
 	if !ok {
