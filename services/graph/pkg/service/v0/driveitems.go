@@ -160,7 +160,7 @@ func (g Graph) GetRootDriveChildren(w http.ResponseWriter, r *http.Request) {
 
 	// force vault storage space if vault mode is enabled
 	if g.config.EnableVaultMode {
-		filters = append(filters, listStorageSpacesIDFilter(utils.VaultStorageProviderID))
+		filters = append(filters, listStorageSpacesIDFilter(storagespace.FormatStorageID(utils.VaultStorageProviderID, currentUser.GetId().GetOpaqueId())))
 	}
 
 	res, err := gatewayClient.ListStorageSpaces(ctx, &storageprovider.ListStorageSpacesRequest{
