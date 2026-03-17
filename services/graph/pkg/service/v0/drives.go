@@ -32,6 +32,7 @@ import (
 	v0 "github.com/owncloud/ocis/v2/protogen/gen/ocis/messages/settings/v0"
 	settingssvc "github.com/owncloud/ocis/v2/protogen/gen/ocis/services/settings/v0"
 	"github.com/owncloud/ocis/v2/services/graph/pkg/errorcode"
+	"github.com/owncloud/ocis/v2/services/graph/pkg/middleware"
 	settingsServiceExt "github.com/owncloud/ocis/v2/services/settings/pkg/store/defaults"
 )
 
@@ -423,7 +424,7 @@ func (g Graph) createDrive(w http.ResponseWriter, r *http.Request, apiVersion AP
 	}
 
 	// force vault storage space if vault mode is enabled
-	if g.config.EnableVaultMode {
+	if middleware.IsVaultMode(ctx) {
 		csr.Opaque = utils.AppendPlainToOpaque(csr.Opaque, "storage_id", utils.VaultStorageProviderID)
 	}
 
@@ -768,7 +769,7 @@ func (g Graph) ListStorageSpacesWithFilters(ctx context.Context, filters []*stor
 	}
 
 	// force vault storage space if vault mode is enabled
-	if g.config.EnableVaultMode {
+	if middleware.IsVaultMode(ctx) {
 		utils.AppendPlainToOpaque(lReq.Opaque, "storage_id", utils.VaultStorageProviderID)
 	}
 

@@ -225,12 +225,8 @@ func NewService(opts ...Option) (Graph, error) { //nolint:maintidx
 		return svc, err
 	}
 
-	m.Route(options.Config.HTTP.Root, func(r chi.Router) {
+	graphRoutes := func(r chi.Router) {
 		r.Use(middleware.StripSlashes)
-		if options.Config.EnableVaultMode {
-			r.Use(requireMFA)
-		}
-
 		r.Route("/v1beta1", func(r chi.Router) {
 			r.Route("/me", func(r chi.Router) {
 				r.Get("/drives", svc.GetDrives(APIVersion_1_Beta_1))
@@ -399,7 +395,18 @@ func NewService(opts ...Option) (Graph, error) { //nolint:maintidx
 				})
 			})
 		})
-	})
+	}
+
+	m.Route(options.Config.HTTP.Root, graphRoutes)
+
+	// Ini the Vault routes
+	if options.Config.EnableVaultMode {
+		m.Route("/vault/graph", func(r chi.Router) {
+			r.Use(requireMFA)
+			r.Use(graphm.VaultModeMiddleware())
+			graphRoutes(r)
+		})
+	}
 
 	_ = chi.Walk(m, func(method string, route string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) error {
 		options.Logger.Debug().Str("method", method).Str("route", route).Int("middlewares", len(middlewares)).Msg("serving endpoint")
