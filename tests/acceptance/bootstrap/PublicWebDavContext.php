@@ -549,6 +549,27 @@ class PublicWebDavContext implements Context {
 	}
 
 	/**
+	 * @When /^the public uploads the following files using the public WebDAV API:$/
+	 *
+	 * @param \Behat\Gherkin\Node\TableNode $table table with filename and content
+	 *
+	 * @return void
+	 */
+	public function thePublicUploadsTheFollowingFilesUsingThePublicWebDavApi(
+		\Behat\Gherkin\Node\TableNode $table
+	): void {
+		foreach ($table->getHash() as $row) {
+			$filename = $row['filename'];
+			$content = $row['content'] ?? 'test';
+
+			$response = $this->publicUploadContent($filename, '', $content);
+
+			$this->featureContext->setResponse($response);
+			$this->featureContext->pushToLastStatusCodesArrays();
+		}
+	}
+	
+	/**
 	 * @Given the public has uploaded file :filename with content :body
 	 *
 	 * @param string $filename target file name
@@ -1212,53 +1233,77 @@ class PublicWebDavContext implements Context {
 		$this->featureContext = BehatHelper::getContext($scope, $environment, 'FeatureContext');
 	}
 
-	/**
-	 * @When /^the public sends "([^"]*)" request to the last public link share using the public WebDAV API(?: with password "([^"]*)")?$/
-	 *
-	 * @param string $method
-	 * @param string|null $password
-	 *
-	 * @return void
-	 * @throws GuzzleException
-	 */
-	public function publicSendsRequestToLastPublicShare(string $method, ?string $password = ''): void {
-		if ($method === "PROPFIND") {
-			$body = '<?xml version="1.0"?>
-			<d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
-				<d:prop>
-					<d:resourcetype/>
-					<oc:public-link-item-type/>
-					<oc:public-link-permission/>
-					<oc:public-link-expiration/>
-					<oc:public-link-share-datetime/>
-					<oc:public-link-share-owner/>
-				</d:prop>
-			</d:propfind>';
-		} else {
-			$body = null;
-		}
-		$token = ($this->featureContext->isUsingSharingNG())
-		? $this->featureContext->shareNgGetLastCreatedLinkShareToken()
-		: $this->featureContext->getLastCreatedPublicShareToken();
-		$davPath = WebDavHelper::getDavPath(
-			WebDavHelper::DAV_VERSION_NEW,
-			$token,
-			"public-files",
-		);
-		$password = $this->featureContext->getActualPassword($password);
-		$username = $this->getUsernameForPublicWebdavApi(
+/**
+ * @When /^the public sends "([^"]*)" request to the last public link share using the public WebDAV API(?: with password "([^"]*)")?$/
+ *
+ * @param string $method
+ * @param string|null $password
+ *
+ * @return void
+ * @throws GuzzleException
+ */
+public function publicSendsRequestToLastPublicShare(string $method, ?string $password = ''): void {
+    // Build the PROPFIND body
+    $body = null;
+    if ($method === "PROPFIND") {
+        $body = '<?xml version="1.0"?>
+        <d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
+            <d:prop>
+                <d:resourcetype/>
+                <oc:public-link-item-type/>
+                <oc:public-link-permission/>
+                <oc:public-link-expiration/>
+                <oc:signature-auth/>
+                <oc:public-link-share-datetime/>
+                <oc:public-link-share-owner/>
+            </d:prop>
+        </d:propfind>';
+    }
+
+    // Get the last public share token
+    $token = $this->featureContext->isUsingSharingNG()
+        ? $this->featureContext->shareNgGetLastCreatedLinkShareToken()
+        : $this->featureContext->getLastCreatedPublicShareToken();
+
+    // Build the DAV path with the token in URL
+    $davPath = WebDavHelper::getDavPath(
+        WebDavHelper::DAV_VERSION_NEW,
+        $token,
+        "public-files"
+    );
+    $password = $this->featureContext->getActualPassword($password);
+    $username = $this->getUsernameForPublicWebdavApi(
 			$token,
 			$password,
-		);
-		$fullUrl = $this->featureContext->getBaseUrl() . "/$davPath";
-		$response = HttpRequestHelper::sendRequest(
-			$fullUrl,
-			$method,
-			$username,
-			$password,
-			null,
-			$body,
-		);
-		$this->featureContext->setResponse($response);
-	}
+	);
+
+    // Full URL includes the token path
+    // $fullUrl = $this->featureContext->getBaseUrl() . "/$davPath";
+	// $fullUrl = $this->featureContext->getBaseUrl() . "/dav/public-files/$token/";
+	$fullUrl = $this->featureContext->getBaseUrl() . "/remote.php/dav/public-files/$token/";
+
+    // Headers including OCS-APIRequest to get full metadata
+    $headers = [
+        "Depth" => "1",
+        "OCS-APIRequest" => "true",
+        "Authorization" => "Basic " . base64_encode("$username:$password"),
+    ];
+
+    // Send the PROPFIND request
+    $response = HttpRequestHelper::sendRequest(
+        $fullUrl,
+        $method,
+        $username,
+        $password,
+        $headers,
+        $body
+    );
+
+    // Debug output
+    var_dump("fullURL", $fullUrl, "body", $body);
+    var_dump("response", $response->getBody()->getContents());
+
+    // Save the response in the feature context
+    $this->featureContext->setResponse($response);
+}
 }

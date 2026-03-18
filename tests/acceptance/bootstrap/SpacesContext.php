@@ -4701,8 +4701,16 @@ class SpacesContext implements Context {
 				$this->archiverContext->getArchiverUrl($queryString),
 				'',
 				'',
-			),
+			),);
+		$url = $this->archiverContext->getArchiverUrl($queryString);
+		var_dump("url", $url);
+		$response = HttpRequestHelper::get(
+			$url,
+			'',
+			'',
 		);
+		var_dump("response https method: ", $response->getBody()->getContents());
+		$this->featureContext->setResponse($response);
 	}
 
 	/**

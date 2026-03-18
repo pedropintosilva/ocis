@@ -926,6 +926,17 @@ class SharingNgContext implements Context {
 	 * @return void
 	 * @throws GuzzleException
 	 */
+	// public function userHasCreatedTheFollowingResourceLinkShare(string $user, TableNode $body): void {
+	// 	$rows = $body->getRowsHash();
+	// 	Assert::assertArrayHasKey(
+	//  		"resource",
+	//  		$rows,
+	//  		"'resource' should be provided in the data-table while sharing a resource",
+	// 	);
+	// 	$response = $this->createLinkShare($user, $body);
+	// 	$this->featureContext->shareNgAddToCreatedLinkShares($response);
+	//  $this->featureContext->theHTTPStatusCodeShouldBe(200, "Failed while creating public share link!", $response);
+	// }
 	public function userHasCreatedTheFollowingResourceLinkShare(string $user, TableNode $body): void {
 		$rows = $body->getRowsHash();
 		Assert::assertArrayHasKey(
@@ -934,7 +945,7 @@ class SharingNgContext implements Context {
 			"'resource' should be provided in the data-table while sharing a resource",
 		);
 		$response = $this->createLinkShare($user, $body);
-		$this->featureContext->theHTTPStatusCodeShouldBe(200, "Failed while creating public share link!", $response);
+	 	$this->featureContext->theHTTPStatusCodeShouldBe(200, "Failed while creating public share link!", $response);
 	}
 
 	/**
