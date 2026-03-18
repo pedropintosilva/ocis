@@ -14,6 +14,7 @@ import (
 	"github.com/owncloud/ocis/v2/services/graph/pkg/errorcode"
 	revactx "github.com/owncloud/reva/v2/pkg/ctx"
 	"github.com/owncloud/reva/v2/pkg/rgrpc/todo/pool"
+	"github.com/owncloud/reva/v2/pkg/storagespace"
 	"github.com/owncloud/reva/v2/pkg/utils"
 	"google.golang.org/grpc/metadata"
 )
@@ -24,8 +25,8 @@ func CreateHome(optionSetters ...Option) func(next http.Handler) http.Handler {
 	logger := options.Logger
 
 	cache := ttlcache.New(
-		ttlcache.WithTTL[string, string](60*time.Second),
-		ttlcache.WithDisableTouchOnHit[string, string](),
+		ttlcache.WithTTL[string, struct{}](60*time.Second),
+		ttlcache.WithDisableTouchOnHit[string, struct{}](),
 	)
 	go cache.Start()
 
@@ -47,7 +48,7 @@ type createHome struct {
 	revaGatewaySelector pool.Selectable[gateway.GatewayAPIClient]
 	roleQuotas          map[string]uint64
 	createVaultHome     bool
-	cache               *ttlcache.Cache[string, string]
+	cache               *ttlcache.Cache[string, struct{}]
 }
 
 func (m createHome) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -63,23 +64,26 @@ func (m createHome) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	createHomeReq := &provider.CreateHomeRequest{}
 	u, ok := revactx.ContextGetUser(ctx)
-	if ok {
-		roleIDs, err := m.getUserRoles(u)
-		if err != nil {
-			m.logger.Error().Err(err).Str("userid", u.Id.OpaqueId).Msg("failed to get roles for user")
-			errorcode.GeneralException.Render(w, req, http.StatusInternalServerError, "Unauthorized")
-			return
-		}
-		if limit, hasLimit := m.checkRoleQuotaLimit(roleIDs); hasLimit {
-			createHomeReq.Opaque = utils.AppendPlainToOpaque(nil, "quota", strconv.FormatUint(limit, 10))
-		}
+	if !ok || u == nil {
+		m.logger.Error().Msg("no user in context")
+		m.next.ServeHTTP(w, req)
+		return
+	}
+	roleIDs, err := m.getUserRoles(u)
+	if err != nil {
+		m.logger.Error().Err(err).Str("userid", u.Id.OpaqueId).Msg("failed to get roles for user")
+		errorcode.GeneralException.Render(w, req, http.StatusInternalServerError, "Unauthorized")
+		return
+	}
+	if limit, hasLimit := m.checkRoleQuotaLimit(roleIDs); hasLimit {
+		createHomeReq.Opaque = utils.AppendPlainToOpaque(nil, "quota", strconv.FormatUint(limit, 10))
 	}
 
 	client, err := m.revaGatewaySelector.Next()
 	if err != nil {
 		m.logger.Err(err).Msg("error selecting next gateway client")
 	} else {
-		key := "home" + u.GetId().GetOpaqueId()
+		key := u.GetId().GetOpaqueId()
 		if !m.cache.Has(key) {
 			createHomeRes, err := client.CreateHome(ctx, createHomeReq)
 			switch {
@@ -87,17 +91,17 @@ func (m createHome) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				m.logger.Err(err).Msg("error calling CreateHome")
 			case createHomeRes.GetStatus().GetCode() == rpc.Code_CODE_OK:
 				m.logger.Debug().Interface("userID", u.GetId().GetOpaqueId()).Msg("personal space created")
-				m.cache.Set(key, "ok", 0)
+				m.cache.Set(key, struct{}{}, 0)
 			case createHomeRes.GetStatus().GetCode() == rpc.Code_CODE_ALREADY_EXISTS:
 				m.logger.Info().Interface("userID", u.GetId().GetOpaqueId()).Interface("status", createHomeRes.GetStatus()).Msg("personal space already exists")
-				m.cache.Set(key, "ok", 0)
+				m.cache.Set(key, struct{}{}, 0)
 			default:
 				m.logger.Error().Interface("userID", u.GetId().GetOpaqueId()).Interface("status", createHomeRes.GetStatus()).Msg("personal space creation failed")
 			}
 		}
 
 		if m.createVaultHome {
-			vaultKey := "vault" + u.GetId().GetOpaqueId()
+			vaultKey := storagespace.FormatStorageID(utils.VaultStorageProviderID, u.GetId().GetOpaqueId())
 			if !m.cache.Has(vaultKey) {
 				// Create vault personal space
 				// Inject storage_id into opaque for vault personal space
@@ -108,10 +112,10 @@ func (m createHome) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 					m.logger.Err(err).Msg("error calling CreateHome for vault personal")
 				case cpsRes.GetStatus().GetCode() == rpc.Code_CODE_OK:
 					m.logger.Debug().Interface("userID", u.GetId().GetOpaqueId()).Msg("vault personal space created")
-					m.cache.Set(vaultKey, "ok", 0)
+					m.cache.Set(vaultKey, struct{}{}, 0)
 				case cpsRes.GetStatus().GetCode() == rpc.Code_CODE_ALREADY_EXISTS:
 					m.logger.Info().Interface("userID", u.GetId().GetOpaqueId()).Interface("status", cpsRes.GetStatus()).Msg("vault personal space already exists")
-					m.cache.Set(vaultKey, "ok", 0)
+					m.cache.Set(vaultKey, struct{}{}, 0)
 				default:
 					m.logger.Error().Interface("userID", u.GetId().GetOpaqueId()).Interface("status", cpsRes.GetStatus()).Msg("vault personal space creation failed")
 				}
