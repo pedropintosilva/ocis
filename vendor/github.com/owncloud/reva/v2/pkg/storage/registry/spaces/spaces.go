@@ -364,15 +364,14 @@ func (r *registry) findProvidersForFilter(ctx context.Context, filters []*provid
 	currentUser := ctxpkg.ContextMustGetUser(ctx)
 	providerInfos := []*registrypb.ProviderInfo{}
 	for address, provider := range r.c.Providers {
-
+		// skip mismatching storageproviders
+		if storageId != "" && storageId != provider.ProviderID {
+			continue
+		}
 		// when a specific space type is requested we may skip this provider altogether if it is not configured for that type
 		// we have to ignore a space type filter with +grant or +mountpoint type because they can live on any provider
 		if requestedSpaceType != "" && !strings.HasPrefix(requestedSpaceType, "+") {
 			found := false
-			if storageId != "" && storageId != provider.ProviderID {
-				// skip mismatching storageproviders
-				continue
-			}
 			for spaceType := range provider.Spaces {
 				if spaceType == requestedSpaceType {
 					found = true

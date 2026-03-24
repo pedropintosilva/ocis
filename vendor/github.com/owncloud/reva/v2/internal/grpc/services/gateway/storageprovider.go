@@ -181,7 +181,7 @@ func (s *svc) CreateStorageSpace(ctx context.Context, req *provider.CreateStorag
 		req.Opaque = utils.AppendPlainToOpaque(req.Opaque, "storage_id", storageId)
 	}
 
-	srClient, err := pool.GetStorageRegistryClient(s.c.StorageRegistryEndpoint)
+	srClient, err := s.getStorageRegistryClient(ctx, s.c.StorageRegistryEndpoint)
 	if err != nil {
 		return &provider.CreateStorageSpaceResponse{
 			Status: status.NewStatusFromErrType(ctx, "gateway could get storage registry client", err),
@@ -287,7 +287,7 @@ func (s *svc) ListStorageSpaces(ctx context.Context, req *provider.ListStorageSp
 		filters["storage_id"] = utils.ReadPlainFromOpaque(req.Opaque, "storage_id")
 	}
 
-	c, err := pool.GetStorageRegistryClient(s.c.StorageRegistryEndpoint)
+	c, err := s.getStorageRegistryClient(ctx, s.c.StorageRegistryEndpoint)
 	if err != nil {
 		return &provider.ListStorageSpacesResponse{
 			Status: status.NewStatusFromErrType(ctx, "gateway could not get storage registry client", err),
@@ -341,6 +341,10 @@ func (s *svc) UpdateStorageSpace(ctx context.Context, req *provider.UpdateStorag
 		}, nil
 	}
 
+	if res.Status.Code == rpc.Code_CODE_OK {
+		id := res.StorageSpace.Root
+		s.providerCache.RemoveListStorageProviders(id)
+	}
 	return res, nil
 }
 
@@ -375,6 +379,7 @@ func (s *svc) DeleteStorageSpace(ctx context.Context, req *provider.DeleteStorag
 	}
 
 	id := &provider.ResourceId{OpaqueId: req.GetId().GetOpaqueId()}
+	s.providerCache.RemoveListStorageProviders(id)
 
 	if dsRes.Status.Code != rpc.Code_CODE_OK {
 		return dsRes, nil
@@ -445,7 +450,7 @@ func (s *svc) GetHome(ctx context.Context, _ *provider.GetHomeRequest) (*provide
 		return nil, errors.New("user not found in context")
 	}
 
-	srClient, err := pool.GetStorageRegistryClient(s.c.StorageRegistryEndpoint)
+	srClient, err := s.getStorageRegistryClient(ctx, s.c.StorageRegistryEndpoint)
 	if err != nil {
 		return &provider.GetHomeResponse{
 			Status: status.NewStatusFromErrType(ctx, "gateway could not get storage registry client", err),

@@ -25,6 +25,7 @@ import (
 	registry "github.com/cs3org/go-cs3apis/cs3/storage/registry/v1beta1"
 	ctxpkg "github.com/owncloud/reva/v2/pkg/ctx"
 	"github.com/owncloud/reva/v2/pkg/storage/cache"
+	"github.com/owncloud/reva/v2/pkg/storagespace"
 	"github.com/owncloud/reva/v2/pkg/utils"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -41,8 +42,13 @@ type cachedRegistryClient struct {
 
 func (c *cachedRegistryClient) ListStorageProviders(ctx context.Context, in *registry.ListStorageProvidersRequest, opts ...grpc.CallOption) (*registry.ListStorageProvidersResponse, error) {
 	spaceID := utils.ReadPlainFromOpaque(in.GetOpaque(), "space_id")
+	resourceID := spaceID
 	if storageID := utils.ReadPlainFromOpaque(in.GetOpaque(), "storage_id"); storageID != "" {
-		spaceID = storageID + "$" + spaceID
+		if spaceID != "" {
+			resourceID = storagespace.FormatStorageID(storageID, spaceID)
+		} else {
+			resourceID = storageID
+		}
 	}
 
 	u, ok := ctxpkg.ContextGetUser(ctx)
@@ -50,7 +56,7 @@ func (c *cachedRegistryClient) ListStorageProviders(ctx context.Context, in *reg
 		return nil, errors.New("user not found in context")
 	}
 
-	key := c.cache.GetKey(u.GetId(), spaceID)
+	key := c.cache.GetKey(u.GetId(), resourceID)
 	if key != "" {
 		s := &registry.ListStorageProvidersResponse{}
 		if err := c.cache.PullFromCache(key, s); err == nil {
