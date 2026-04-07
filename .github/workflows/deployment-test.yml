@@ -1,0 +1,64 @@
+# name: Docker Compose Action
+
+# on: [push]
+
+# jobs:
+#   build:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+#       - name: Run docker compose
+#         uses: hoverkraft-tech/compose-action@4894d2492015c1774ee5a13a95b1072093087ec3 # v2.5.0
+#         with:
+#           compose-file: "./deployments/examples/ocis_keycloak/docker-compose.yml"
+#       - name: Execute tests in the running services
+#         run: |
+#           docker compose exec test-app pytest
+
+name: compose
+
+on: [push]
+
+jobs:
+  deploy:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # - name: ocis_keycloak
+          #   compose_file: ./deployments/examples/ocis_keycloak/docker-compose.yml
+          #   env:
+          #     OCIS_LOG_LEVEL: debug
+
+          - name: ocis_ldap
+            compose_file: ./deployments/examples/ocis_ldap/docker-compose.yml
+            test_service: test-runner
+            env:
+              PROXY_ENABLE_BASIC_AUTH: true
+
+          # - name: ocis_multi
+          #   compose_file: ./deployments/examples/ocis_multi/docker-compose.yml
+          #   test_service: app
+          #   env:
+          #     PROXY_ENABLE_BASIC_AUTH: true
+
+          # - name: ocis_ocm
+          #   compose_file: ./deployments/examples/ocis_ocm/docker-compose.yml
+          #   test_service: app
+          #   env:
+          #     PROXY_ENABLE_BASIC_AUTH: true
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: deploy ${{ matrix.name }}
+        uses: hoverkraft-tech/compose-action@4894d2492015c1774ee5a13a95b1072093087ec3 # v2.5.0
+        with:
+          compose-file: ${{ matrix.compose_file }}
+
+      - name: Execute tests
+        run: |
+          curl -kv https://ocis.owncloud.test/graph/v1.0/me
